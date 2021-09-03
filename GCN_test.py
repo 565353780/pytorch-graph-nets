@@ -5,10 +5,11 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 from torch_geometric.datasets import Planetoid
+from torch_geometric.data import DataLoader
 
 class GCN(torch.nn.Module):
     def __init__(self):
-        super(Net, self).__init__()
+        super(GCN, self).__init__()
         self.conv1 = GCNConv(dataset.num_node_features, 16)
         self.conv2 = GCNConv(16, dataset.num_classes)
 
@@ -31,37 +32,42 @@ class GCN_Trainer:
         self.device = None
         self.model = None
         self.dataset = None
+        self.data_loader = None
         self.optimizer = None
         return
 
     def loadModel(self):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model = GCN().to(device)
+        self.device = 'cpu'
+        self.model = GCN().to(self.device)
         self.model.train()
         return
 
-    def loadDataset(self, dataset):
+    def loadDataset(self, dataset, batch_size):
         self.dataset = dataset
+        self.data_loader = DataLoader(self.dataset, batch_size=batch_size, shuffle=True)
         return
 
-    def train(self):
-        data = self.dataset[0].to(device)
+    def train(self, epoch_num):
+        data = self.dataset[0].to(self.device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.01, weight_decay=5e-4)
 
-        for epoch in range(200):
+        for epoch in range(epoch_num):
             self.optimizer.zero_grad()
-            out = model(data)
+            out = self.model(data)
             loss = F.nll_loss(out[data.train_mask], data.y[data.train_mask])
             loss.backward()
             self.optimizer.step()
-            print("\rTrain epoch = " + str(epoch) + "/" + str(200), end="")
+            print("\rTrain epoch = " + str(epoch+1) + "/" + str(epoch_num), end="")
         print()
         return
 
     def detect(self, data):
         self.model.eval()
-        data = data.to(device)
+        data = data.to(self.device)
+        print(data)
         pred = self.model(data).argmax(dim=1)
+        print(pred.shape)
         correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
         acc = int(correct) / int(data.test_mask.sum())
         print('Accuracy: {:.4f}'.format(acc))
@@ -84,7 +90,7 @@ class GCN_Detector:
         return
 
     def detect(self, data):
-        self.model.eval()
+        data = data.to(self.device)
         pred = self.model(data).argmax(dim=1)
         correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
         acc = int(correct) / int(data.test_mask.sum())
@@ -92,14 +98,18 @@ class GCN_Detector:
         return
 
 if __name__ == '__main__':
-    dataset = Planetoid(root='/home/chli/Cora', name='Cora')
+    dataset = Planetoid(
+        root='/home/chli/Cora',
+        name='Cora')
+    batch_size = 32
 
     gcn_trainer = GCN_Trainer()
 
     gcn_trainer.loadModel()
-    gcn_trainer.loadDataset(dataset)
+    gcn_trainer.loadDataset(dataset, batch_size)
 
-    gcn_trainer.train()
+    gcn_trainer.train(200)
 
-    gcn_trainer.detect(gcn_trainer.dataset[0])
+    graph = dataset[0]
+    gcn_trainer.detect(graph)
 
